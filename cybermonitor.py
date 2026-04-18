@@ -20,7 +20,7 @@ from urllib.error import URLError, HTTPError
 from tkinter import ttk, filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 
-APP_TITLE = "Cyber Monitor"
+APP_TITLE = "Cyber System Monitor"
 WINDOW_SIZE = "1600x980"
 REFRESH_MS = 3000
 LOG_LINES = 300
@@ -148,7 +148,11 @@ class CyberMonitorApp:
         filter_entry = ttk.Entry(toolbar, textvariable=self.filter_text, width=22)
         filter_entry.pack(side="left")
         filter_entry.bind("<KeyRelease>", lambda e: self.apply_filters())
-        self.summary_label = ttk.Label(outer, text="", justify="left")
+
+  
+     
+   
+      
 
         self.notebook = ttk.Notebook(outer)
         self.notebook.pack(fill="both", expand=True)
@@ -174,9 +178,23 @@ class CyberMonitorApp:
         self.logs_text.pack(fill="both", expand=True)
         self.logs_text.configure(state="disabled")
 
-        self.events_text = ScrolledText(self.events_tab, wrap="none", font=("Courier New", 10))
-        self.events_text.pack(fill="both", expand=True)
-        self.events_text.configure(state="disabled")
+        events_frame = ttk.Frame(self.events_tab, padding=6)
+        events_frame.pack(fill="both", expand=True)
+
+        event_columns = ("time", "type", "details", "user")
+        self.events_table = ttk.Treeview(events_frame, columns=event_columns, show="headings", height=20)
+        for col, width in [("time", 190), ("type", 170), ("details", 760), ("user", 180)]:
+            self.events_table.heading(col, text=col.upper())
+            self.events_table.column(col, width=width, anchor="w")
+        self.events_table.pack(fill="both", expand=True, side="left")
+
+        events_scroll = ttk.Scrollbar(events_frame, orient="vertical", command=self.events_table.yview)
+        events_scroll.pack(side="right", fill="y")
+        self.events_table.configure(yscrollcommand=events_scroll.set)
+
+        self.events_table.tag_configure("HIGH", background="#ffd6d6")
+        self.events_table.tag_configure("MEDIUM", background="#fff2cc")
+        self.events_table.tag_configure("LOW", background="#e7f4ff")
 
         cpu_frame = ttk.Frame(self.cpu_tab, padding=6)
         cpu_frame.pack(fill="both", expand=True)
@@ -429,10 +447,139 @@ class CyberMonitorApp:
         logs = self.last_logs
         events = self.last_events
         if term:
-            logs = "\n".join(line for line in self.last_logs.splitlines() if term in line.lower())
-            events = "\n".join(line for line in self.last_events.splitlines() if term in line.lower())
+            logs = "".join(line for line in self.last_logs.splitlines() if term in line.lower())
+            events = "".join(line for line in self.last_events.splitlines() if term in line.lower())
         self.set_text(self.logs_text, logs)
-        self.set_text(self.events_text, events)
+        self.populate_events_table(events)
+
+    def classify_event(self, details: str, event_id: str = ""):
+        text = f"{event_id} {details}".lower()
+        if any(k in text for k in ["4625", "failed password", "authentication failure", "invalid user", "failed login"]):
+            return "FAILED LOGIN", "HIGH"
+        if any(k in text for k in ["shutdown", "power off"]):
+            return "SHUTDOWN", "MEDIUM"
+        if any(k in text for k in ["restart", "reboot", "1074", "6006", "6008"]):
+            return "RESTART", "MEDIUM"
+        if any(k in text for k in ["4624", "login", "logon", "session opened", "accepted password"]):
+            return "LOGIN", "LOW"
+        return "OTHER", "LOW"
+
+    def extract_user_from_text(self, details: str) -> str:
+        patterns = [
+            r"user\s+([^\s,;]+)",
+            r"for user\s+'?([^\s,;']+)",
+            r"on behalf of user\s+([^\s,;]+)",
+            r"account name:\s*([^\s,;]+)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, details, flags=re.IGNORECASE)
+            if match:
+                return match.group(1)
+        if "nt authority\\system" in details.lower():
+            return "NT AUTHORITY\\SYSTEM"
+        return "system"
+
+    def parse_windows_event_records(self, text: str):
+        records = []
+        current = {}
+        message_lines = []
+        capture_message = False
+
+        for raw_line in text.splitlines():
+            line = raw_line.rstrip()
+            stripped = line.strip()
+
+            if stripped.startswith("====="):
+                continue
+
+            if stripped.startswith("TimeCreated"):
+                if current:
+                    current["Message"] = " ".join(message_lines).strip() or current.get("Message", "")
+                    records.append(current)
+                    current = {}
+                    message_lines = []
+                    capture_message = False
+                current["TimeCreated"] = stripped.split(":", 1)[1].strip() if ":" in stripped else stripped
+                continue
+
+            if not stripped:
+                if current and (message_lines or current.get("Message")):
+                    current["Message"] = " ".join(message_lines).strip() or current.get("Message", "")
+                    records.append(current)
+                    current = {}
+                    message_lines = []
+                    capture_message = False
+                continue
+
+            if ":" in stripped and not capture_message:
+                key, value = stripped.split(":", 1)
+                key = key.strip()
+                value = value.strip()
+                current[key] = value
+                capture_message = (key == "Message")
+                if capture_message and value:
+                    message_lines.append(value)
+            elif capture_message:
+                message_lines.append(stripped)
+
+        if current:
+            current["Message"] = " ".join(message_lines).strip() or current.get("Message", "")
+            records.append(current)
+
+        return records
+
+    def parse_events_for_table(self, text: str):
+        rows = []
+        if self.platform == "windows" and "TimeCreated" in text:
+            for record in self.parse_windows_event_records(text):
+                details = record.get("Message") or record.get("ProviderName") or "Event"
+                event_type, severity = self.classify_event(details, str(record.get("Id", "")))
+                rows.append((
+                    record.get("TimeCreated", "-"),
+                    event_type,
+                    details,
+                    self.extract_user_from_text(details),
+                    severity,
+                ))
+            return rows
+
+        current_section = ""
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith("====="):
+                current_section = line.strip("= ").upper()
+                continue
+
+            time_value = "-"
+            details = line
+
+            match = re.match(r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})(.*)$", line)
+            if match:
+                time_value = match.group(1)
+                details = match.group(2).strip(" -") or line
+            elif re.match(r"^[A-Z][a-z]{2}\s+[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4}", line):
+                time_value = "System Event"
+
+            event_type, severity = self.classify_event(f"{current_section} {details}")
+            if current_section and event_type == "OTHER":
+                event_type = current_section.replace("RECENT ", "")
+            rows.append((time_value, event_type, details, self.extract_user_from_text(details), severity))
+
+        return rows
+
+    def populate_events_table(self, text: str):
+        for item in self.events_table.get_children():
+            self.events_table.delete(item)
+
+        rows = self.parse_events_for_table(text)
+        if not rows:
+            self.events_table.insert("", tk.END, values=("-", "OTHER", "No matching events found.", "-"), tags=("LOW",))
+            return
+
+        for time_value, event_type, details, user, severity in rows:
+            self.events_table.insert("", tk.END, values=(time_value, event_type, details, user), tags=(severity,))
 
     def set_text(self, widget: ScrolledText, text: str):
         if len(text) > MAX_TEXT:
@@ -845,7 +992,7 @@ class CyberMonitorApp:
 
     def build_alert_email_body(self, findings, sent_rate=0.0, recv_rate=0.0, net_severity="LOW"):
         lines = [
-            "Automatic alert from Cyber System Monitor",
+            "Automatic alert from Cyber Monitor",
             "",
             f"Host: {os.environ.get('COMPUTERNAME') or os.environ.get('HOSTNAME') or 'unknown-host'}",
             f"Platform: {self.platform}",
