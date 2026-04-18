@@ -32,3 +32,7 @@ cybermonitor/
 
 ## License
 GNU GPLv3
+
+## Demo & Tutorial
+
+See [DEMO_TUTORIAL.md](DEMO_TUTORIAL.md) for a full walkthrough, demo flow, and presentation guide.
