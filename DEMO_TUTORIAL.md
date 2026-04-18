@@ -184,8 +184,3 @@ Recommended structure:
 
 ---
 
-## Short Presentation Script
-
-> Cyber Monitor is a Python-based cybersecurity desktop tool that provides real-time visibility into system logs, login events, process activity, storage usage, and network connections.  
-> It also enriches public remote IP addresses with Geo/IP information, classifies activity by severity, and supports email alerting and report export.  
-> The goal of the project is to simulate a lightweight SOC-style monitoring dashboard for cybersecurity awareness and system analysis.
