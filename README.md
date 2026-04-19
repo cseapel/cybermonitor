@@ -63,11 +63,6 @@ A lightweight cybersecurity desktop monitoring tool.
 Download the latest version from the [Releases](https://github.com/cseapel/cybermonitor/releases/download/cybersecurity/CyberMonitorSetup.exe)
 ---
 
-## Run
-```bash
-pip install -r requirements.txt
-python cybermonitor.py
-```
 
 ## Screenshot of dashboard
 ![Dashboard](screenshots/dashboard.png)
