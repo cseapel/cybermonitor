@@ -149,6 +149,8 @@ class CyberMonitorApp:
         filter_entry.pack(side="left")
         filter_entry.bind("<KeyRelease>", lambda e: self.apply_filters())
 
+        self.summary_label = ttk.Label(outer, text="", justify="left")
+
   
      
    
@@ -432,7 +434,8 @@ class CyberMonitorApp:
         self.last_network_rows = payload["network"]
         self.last_failed_login_count = payload["failed_logins"]
         self.current_net_severity = payload["net_severity"]
-        self.summary_label.config(text=payload["summary"])
+        if hasattr(self, "summary_label"):
+            self.summary_label.config(text=payload["summary"])
         self.apply_filters()
         self.populate_cpu(payload["cpu"])
         self.populate_storage(payload["storage"])
@@ -447,8 +450,8 @@ class CyberMonitorApp:
         logs = self.last_logs
         events = self.last_events
         if term:
-            logs = "".join(line for line in self.last_logs.splitlines() if term in line.lower())
-            events = "".join(line for line in self.last_events.splitlines() if term in line.lower())
+            logs = "\n".join(line for line in self.last_logs.splitlines() if term in line.lower())
+            events = "\n".join(line for line in self.last_events.splitlines() if term in line.lower())
         self.set_text(self.logs_text, logs)
         self.populate_events_table(events)
 
@@ -1054,7 +1057,7 @@ class CyberMonitorApp:
         stamp = time.strftime("%Y%m%d_%H%M%S")
 
         summary_path = temp_dir / f"cyber_monitor_summary_{stamp}.txt"
-        summary_text = self.summary_label.cget("text") + "\n\n" + self.build_alert_email_body(["Attached report bundle"])
+        summary_text = (self.summary_label.cget("text") if hasattr(self, "summary_label") else "") + "\n\n" + self.build_alert_email_body(["Attached report bundle"])
         summary_path.write_text(summary_text, encoding="utf-8", errors="replace")
         attachments.append(summary_path)
 
