@@ -6,7 +6,6 @@
 
 A lightweight cybersecurity desktop monitoring tool.
 
-🔗 Repository: https://github.com/cseapel/cybermonitor
 
 ## 🚀 Key Features
 
@@ -124,7 +123,7 @@ See the `LICENSE` file for full details.
 **Apel Mahmud**  
 Cybersecurity Student Project  
 
-GitHub: https://github.com/cseapel/cybermonitor
+🔗 Repository: https://github.com/cseapel/cybermonitor
 
 ---
 
