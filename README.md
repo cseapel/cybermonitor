@@ -58,7 +58,10 @@ A lightweight cybersecurity desktop monitoring tool.
 - Windows Defender may show warnings for unsigned `.exe`
 
 ---
+## 📥 Download
 
+Download the latest version from the [Releases](https://github.com/cseapel/cybermonitor/releases/download/cybersecurity/CyberMonitorSetup.exe)
+---
 
 ## Run
 ```bash
