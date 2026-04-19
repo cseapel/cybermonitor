@@ -39,9 +39,7 @@ A lightweight cybersecurity desktop monitoring tool.
 - 🖥️ **SOC-Inspired Dashboard UI**  
   Designed to simulate a lightweight Security Operations Center interface.
 
-  
-
-## 🚀 Release Notes (v1.0.0)
+---
 
 ### Features
 - Real-time system log monitoring  
