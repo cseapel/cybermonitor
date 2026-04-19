@@ -66,10 +66,13 @@ pip install -r requirements.txt
 python cybermonitor.py
 ```
 
-## Screenshots
+## Screenshot of dashboard
 ![Dashboard](screenshots/dashboard.png)
+## Screenshot of network traffic
 ![Network](screenshots/network-traffic.png)
+## Screenshot of logs events 
 ![Logs](screenshots/logs-events.png)
+## Screenshot of alert settings 
 ![Alerts](screenshots/alert-settings.png)
 
 
