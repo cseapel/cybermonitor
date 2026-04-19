@@ -8,6 +8,79 @@ A lightweight cybersecurity desktop monitoring tool.
 
 🔗 Repository: https://github.com/cseapel/cybermonitor
 
+## 🚀 Key Features
+
+- 🔍 **Real-Time System Monitoring**  
+  View live system logs, events, and activities in one dashboard.
+
+- 🔐 **Login & Security Event Tracking**  
+  Detect failed logins, authentication attempts, and system access behavior.
+
+- ⚙️ **Process & Resource Analysis**  
+  Identify high CPU and memory usage processes with severity classification.
+
+- 💾 **Storage Hotspot Detection**  
+  Discover folders consuming excessive disk space.
+
+- 🌐 **Network Traffic Monitoring**  
+  Track active connections, protocols, and remote endpoints.
+
+- 📍 **Geo/IP Intelligence**  
+  Enrich remote IPs with location and ISP information.
+
+- 🚨 **Severity-Based Alerting**  
+  Classify events as LOW / MEDIUM / HIGH based on thresholds.
+
+- 📧 **Automated Email Alerts**  
+  Notify administrators when suspicious activity is detected.
+
+- 📊 **Data Export & Reporting**  
+  Export system data into CSV format for analysis and documentation.
+
+- 🖥️ **SOC-Inspired Dashboard UI**  
+  Designed to simulate a lightweight Security Operations Center interface.
+
+  
+
+## 🚀 Release Notes (v1.0.0)
+
+### Features
+- Real-time system log monitoring  
+- Login and shutdown event tracking  
+- CPU and memory process monitoring  
+- Storage hotspot detection  
+- Network traffic analysis with Geo/IP lookup  
+- Severity-based alert classification  
+- Email alerting system  
+- CSV report export  
+
+### Notes
+- Requires Python 3.10+  
+- Internet required for Geo/IP enrichment  
+- Administrator privileges may be needed for full system visibility  
+- Windows Defender may show warnings for unsigned `.exe`
+
+---
+
+
+## Run
+```bash
+pip install -r requirements.txt
+python cybermonitor.py
+```
+
+## Screenshots
+![Dashboard](screenshots/dashboard.png)
+![Network](screenshots/network-traffic.png)
+![Logs](screenshots/logs-events.png)
+![Alerts](screenshots/alert-settings.png)
+
+
+
+## Demo & Tutorial
+
+See [DEMO_TUTORIAL.md](DEMO_TUTORIAL.md) for a full walkthrough, demo flow, and presentation guide.
+---
 ## ⚠️ Disclaimer
 
 This software is developed for educational and demonstration purposes only.  
@@ -55,52 +128,3 @@ GitHub: https://github.com/cseapel/cybermonitor
 
 ---
 
-## 🚀 Release Notes (v1.0.0)
-
-### Features
-- Real-time system log monitoring  
-- Login and shutdown event tracking  
-- CPU and memory process monitoring  
-- Storage hotspot detection  
-- Network traffic analysis with Geo/IP lookup  
-- Severity-based alert classification  
-- Email alerting system  
-- CSV report export  
-
-### Notes
-- Requires Python 3.10+  
-- Internet required for Geo/IP enrichment  
-- Administrator privileges may be needed for full system visibility  
-- Windows Defender may show warnings for unsigned `.exe`
-
----
-
-
-## Run
-```bash
-pip install -r requirements.txt
-python cybermonitor.py
-```
-
-## Screenshots
-![Dashboard](screenshots/dashboard.png)
-![Network](screenshots/network-traffic.png)
-![Logs](screenshots/logs-events.png)
-![Alerts](screenshots/alert-settings.png)
-
-## Structure
-```
-cybermonitor/
-├── cybermonitor.py
-├── requirements.txt
-├── README.md
-├── LICENSE
-└── screenshots/
-```
-
-## License
-GNU GPLv3
-
-## Demo & Tutorial
-
-See [DEMO_TUTORIAL.md](DEMO_TUTORIAL.md) for a full walkthrough, demo flow, and presentation guide.
