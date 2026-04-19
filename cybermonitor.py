@@ -20,7 +20,7 @@ from urllib.error import URLError, HTTPError
 from tkinter import ttk, filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 
-APP_TITLE = "Cyber System Monitor"
+APP_TITLE = "Cyber Monitor"
 WINDOW_SIZE = "1600x980"
 REFRESH_MS = 3000
 LOG_LINES = 300
