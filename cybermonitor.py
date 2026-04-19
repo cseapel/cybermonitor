@@ -80,8 +80,15 @@ class CyberMonitorApp:
         self.status = tk.StringVar(value=f"Ready on {self.platform}")
         self.auto_refresh = tk.BooleanVar(value=True)
         self.filter_text = tk.StringVar(value="")
+        self.logs_status = tk.StringVar(value="Open this tab to collect system logs.")
+        self.events_status = tk.StringVar(value="Open this tab to collect login and shutdown events.")
+        self.cpu_status = tk.StringVar(value="Open this tab to collect process data.")
+        self.storage_status = tk.StringVar(value="Open this tab to collect storage data.")
+        self.network_status = tk.StringVar(value="Open this tab to collect network data.")
+        self.loaded_tabs = set()
+        self.current_dashboard_job = None
         self.build_ui()
-        self.refresh_all()
+        self.load_initial_view()
 
     def default_config(self):
         return {
@@ -140,7 +147,7 @@ class CyberMonitorApp:
         ttk.Label(toolbar, text="Folder scan path:").pack(side="left")
         ttk.Entry(toolbar, textvariable=self.selected_path, width=42).pack(side="left", padx=(8, 6))
         ttk.Button(toolbar, text="Browse", command=self.choose_folder).pack(side="left")
-        ttk.Button(toolbar, text="Refresh now", command=self.refresh_all).pack(side="left", padx=(10, 0))
+        ttk.Button(toolbar, text="Refresh now", command=self.refresh_current_tab).pack(side="left", padx=(10, 0))
         ttk.Button(toolbar, text="Email current report", command=self.email_current_report).pack(side="left", padx=(10, 0))
         ttk.Button(toolbar, text="Export CSV", command=self.export_csv_report).pack(side="left", padx=(10, 0))
         ttk.Checkbutton(toolbar, text="Auto refresh", variable=self.auto_refresh, command=self.toggle_auto_refresh).pack(side="left", padx=(12, 0))
@@ -173,13 +180,30 @@ class CyberMonitorApp:
         self.notebook.add(self.storage_tab, text="Storage Hotspots")
         self.notebook.add(self.network_tab, text="Network Traffic")
         self.notebook.add(self.alerts_tab, text="Alert Settings")
+        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
 
         self.build_dashboard_tab()
 
-        self.logs_text = ScrolledText(self.logs_tab, wrap="none", font=("Courier New", 10))
-        self.logs_text.pack(fill="both", expand=True)
-        self.logs_text.configure(state="disabled")
+        ttk.Label(self.logs_tab, textvariable=self.logs_status).pack(anchor="w", padx=8, pady=(8, 0))
+        logs_frame = ttk.Frame(self.logs_tab, padding=6)
+        logs_frame.pack(fill="both", expand=True)
 
+        log_columns = ("time", "source", "severity", "message")
+        self.logs_table = ttk.Treeview(logs_frame, columns=log_columns, show="headings", height=20)
+        for col, width in [("time", 190), ("source", 180), ("severity", 95), ("message", 980)]:
+            self.logs_table.heading(col, text=col.upper())
+            self.logs_table.column(col, width=width, anchor="w")
+        self.logs_table.pack(fill="both", expand=True, side="left")
+
+        logs_scroll = ttk.Scrollbar(logs_frame, orient="vertical", command=self.logs_table.yview)
+        logs_scroll.pack(side="right", fill="y")
+        self.logs_table.configure(yscrollcommand=logs_scroll.set)
+
+        self.logs_table.tag_configure("HIGH", background="#ffd6d6")
+        self.logs_table.tag_configure("MEDIUM", background="#fff2cc")
+        self.logs_table.tag_configure("LOW", background="#e7f4ff")
+
+        ttk.Label(self.events_tab, textvariable=self.events_status).pack(anchor="w", padx=8, pady=(8, 0))
         events_frame = ttk.Frame(self.events_tab, padding=6)
         events_frame.pack(fill="both", expand=True)
 
@@ -198,6 +222,7 @@ class CyberMonitorApp:
         self.events_table.tag_configure("MEDIUM", background="#fff2cc")
         self.events_table.tag_configure("LOW", background="#e7f4ff")
 
+        ttk.Label(self.cpu_tab, textvariable=self.cpu_status).pack(anchor="w", padx=8, pady=(8, 0))
         cpu_frame = ttk.Frame(self.cpu_tab, padding=6)
         cpu_frame.pack(fill="both", expand=True)
         columns = ("severity", "pid", "name", "cpu", "memory", "user")
@@ -207,6 +232,7 @@ class CyberMonitorApp:
             self.cpu_table.column(col, width=width, anchor="w")
         self.cpu_table.pack(fill="both", expand=True)
 
+        ttk.Label(self.storage_tab, textvariable=self.storage_status).pack(anchor="w", padx=8, pady=(8, 0))
         storage_frame = ttk.Frame(self.storage_tab, padding=6)
         storage_frame.pack(fill="both", expand=True)
         s_cols = ("severity", "folder", "size", "files")
@@ -216,6 +242,7 @@ class CyberMonitorApp:
             self.storage_table.column(col, width=width, anchor="w")
         self.storage_table.pack(fill="both", expand=True)
 
+        ttk.Label(self.network_tab, textvariable=self.network_status).pack(anchor="w", padx=8, pady=(8, 0))
         network_frame = ttk.Frame(self.network_tab, padding=6)
         network_frame.pack(fill="both", expand=True)
         top_net = ttk.Frame(network_frame)
@@ -340,11 +367,18 @@ class CyberMonitorApp:
     def default_scan_path(self) -> str:
         return str(Path.home())
 
+    def refresh_current_tab(self):
+        tab_text = self.notebook.tab(self.notebook.select(), "text")
+        if tab_text == "Dashboard":
+            self.refresh_dashboard()
+        else:
+            self.load_tab_data(tab_text)
+
     def choose_folder(self):
         chosen = filedialog.askdirectory(initialdir=self.selected_path.get() or self.default_scan_path())
         if chosen:
             self.selected_path.set(chosen)
-            self.refresh_all()
+            self.refresh_current_tab()
 
     def save_settings_from_form(self):
         self.config["email_enabled"] = bool(self.email_enabled_var.get())
@@ -369,91 +403,235 @@ class CyberMonitorApp:
 
     def toggle_auto_refresh(self):
         if self.auto_refresh.get():
-            self.schedule_refresh()
-        elif self.refresh_job is not None:
-            self.root.after_cancel(self.refresh_job)
-            self.refresh_job = None
+            self.schedule_dashboard_refresh()
+        elif self.current_dashboard_job is not None:
+            self.root.after_cancel(self.current_dashboard_job)
+            self.current_dashboard_job = None
 
-    def schedule_refresh(self):
+    def schedule_dashboard_refresh(self):
         if not self.auto_refresh.get():
             return
-        if self.refresh_job is not None:
-            self.root.after_cancel(self.refresh_job)
-        self.refresh_job = self.root.after(REFRESH_MS, self.refresh_all)
+        if self.current_dashboard_job is not None:
+            self.root.after_cancel(self.current_dashboard_job)
+        self.current_dashboard_job = self.root.after(REFRESH_MS, self.refresh_dashboard)
 
-    def refresh_all(self):
-        if self.worker and self.worker.is_alive():
-            self.schedule_refresh()
+    def load_initial_view(self):
+        self.refresh_dashboard()
+        self.loaded_tabs.add("Dashboard")
+        self.schedule_dashboard_refresh()
+
+    def on_tab_changed(self, event=None):
+        tab_text = self.notebook.tab(self.notebook.select(), "text")
+        if tab_text == "Dashboard":
             return
-        self.status.set("Refreshing system data...")
-        self.worker = threading.Thread(target=self.collect_data, daemon=True)
-        self.worker.start()
-        self.root.after(150, self.check_queue)
+        self.load_tab_data(tab_text)
 
-    def collect_data(self):
+    def load_tab_data(self, tab_text):
+        if self.worker and self.worker.is_alive():
+            return
+
+        status_map = {
+            "System Logs": (self.logs_status, "Collecting system logs..."),
+            "Login / Shutdown Events": (self.events_status, "Collecting login and shutdown events..."),
+            "CPU / Processes": (self.cpu_status, "Collecting process data..."),
+            "Storage Hotspots": (self.storage_status, "Collecting storage data..."),
+            "Network Traffic": (self.network_status, "Collecting network data..."),
+        }
+
+        if tab_text in status_map:
+            status_map[tab_text][0].set(status_map[tab_text][1])
+
+        self.status.set(f"Loading {tab_text}...")
+        self.worker = threading.Thread(target=self.collect_tab_data, args=(tab_text,), daemon=True)
+        self.worker.start()
+        self.root.after(150, self.check_tab_queue)
+
+    def refresh_dashboard(self):
+        if self.worker and self.worker.is_alive():
+            self.schedule_dashboard_refresh()
+            return
+        self.status.set("Refreshing dashboard...")
+        self.worker = threading.Thread(target=self.collect_dashboard_data, daemon=True)
+        self.worker.start()
+        self.root.after(150, self.check_dashboard_queue)
+
+    def collect_dashboard_data(self):
         try:
-            logs = self.fetch_system_logs()
-            events = self.fetch_security_events()
-            processes = self.fetch_processes()
-            storage = self.fetch_storage_usage(self.selected_path.get())
-            network_rows, sent_rate, recv_rate, net_severity = self.fetch_network_activity()
-            failed_logins = self.count_failed_logins(events)
+            sent_rate = 0.0
+            recv_rate = 0.0
+            net_severity = "LOW"
+            network_rows = []
+            if psutil is not None:
+                network_rows, sent_rate, recv_rate, net_severity = self.fetch_network_activity()
+            failed_logins = self.last_failed_login_count
             payload = {
                 "summary": self.build_summary(failed_logins, sent_rate, recv_rate, net_severity),
-                "logs": logs,
-                "events": events,
-                "cpu": processes,
-                "storage": storage,
                 "network": network_rows,
                 "net_sent_rate": sent_rate,
                 "net_recv_rate": recv_rate,
                 "net_severity": net_severity,
                 "failed_logins": failed_logins,
             }
-            self.queue.put(("ok", payload))
+            self.queue.put(("dashboard_ok", payload))
         except Exception as exc:
-            self.queue.put(("error", str(exc)))
+            self.queue.put(("dashboard_error", str(exc)))
 
-    def check_queue(self):
+    def collect_tab_data(self, tab_text):
+        try:
+            payload = {"tab": tab_text}
+            if tab_text == "System Logs":
+                payload["logs"] = self.fetch_system_logs()
+            elif tab_text == "Login / Shutdown Events":
+                payload["events"] = self.fetch_security_events()
+            elif tab_text == "CPU / Processes":
+                payload["cpu"] = self.fetch_processes()
+            elif tab_text == "Storage Hotspots":
+                payload["storage"] = self.fetch_storage_usage(self.selected_path.get())
+            elif tab_text == "Network Traffic":
+                network_rows, sent_rate, recv_rate, net_severity = self.fetch_network_activity()
+                payload["network"] = network_rows
+                payload["net_sent_rate"] = sent_rate
+                payload["net_recv_rate"] = recv_rate
+                payload["net_severity"] = net_severity
+            self.queue.put(("tab_ok", payload))
+        except Exception as exc:
+            self.queue.put(("tab_error", {"tab": tab_text, "error": str(exc)}))
+
+    def check_dashboard_queue(self):
         try:
             state, payload = self.queue.get_nowait()
         except queue.Empty:
-            self.root.after(150, self.check_queue)
+            self.root.after(150, self.check_dashboard_queue)
             return
 
-        if state == "error":
+        if state == "dashboard_error":
             self.status.set(f"Failed: {payload}")
-            messagebox.showerror(APP_TITLE, payload)
-            self.schedule_refresh()
+            self.schedule_dashboard_refresh()
             return
 
-        self.last_logs = payload["logs"]
-        self.last_events = payload["events"]
-        self.last_cpu_rows = payload["cpu"]
-        self.last_storage_rows = payload["storage"]
-        self.last_network_rows = payload["network"]
-        self.last_failed_login_count = payload["failed_logins"]
+        if state != "dashboard_ok":
+            self.queue.put((state, payload))
+            self.root.after(150, self.check_dashboard_queue)
+            return
+
         self.current_net_severity = payload["net_severity"]
-        if hasattr(self, "summary_label"):
-            self.summary_label.config(text=payload["summary"])
-        self.apply_filters()
-        self.populate_cpu(payload["cpu"])
-        self.populate_storage(payload["storage"])
-        self.populate_network(payload["network"], payload["net_sent_rate"], payload["net_recv_rate"])
+        self.summary_label.config(text=payload["summary"])
         self.update_dashboard(payload)
-        self.check_and_send_alerts(payload["cpu"], payload["storage"], payload["network"], payload["failed_logins"], payload["net_sent_rate"], payload["net_recv_rate"], payload["net_severity"])
-        self.status.set(f"Updated at {time.strftime('%Y-%m-%d %H:%M:%S')} | Path: {self.selected_path.get()}")
-        self.schedule_refresh()
+        self.status.set(f"Dashboard updated at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        self.schedule_dashboard_refresh()
+
+    def check_tab_queue(self):
+        try:
+            state, payload = self.queue.get_nowait()
+        except queue.Empty:
+            self.root.after(150, self.check_tab_queue)
+            return
+
+        if state == "tab_error":
+            self.status.set(f"Failed: {payload['error']}")
+            return
+
+        if state != "tab_ok":
+            self.queue.put((state, payload))
+            self.root.after(150, self.check_tab_queue)
+            return
+
+        tab_text = payload["tab"]
+        if tab_text == "System Logs":
+            self.last_logs = payload["logs"]
+            self.populate_logs_table(self.last_logs)
+            self.logs_status.set(f"System logs updated at {time.strftime('%H:%M:%S')}")
+        elif tab_text == "Login / Shutdown Events":
+            self.last_events = payload["events"]
+            self.last_failed_login_count = self.count_failed_logins(self.last_events)
+            self.populate_events_table(self.last_events)
+            self.events_status.set(f"Events updated at {time.strftime('%H:%M:%S')} | Failed logins found: {self.last_failed_login_count}")
+        elif tab_text == "CPU / Processes":
+            self.last_cpu_rows = payload["cpu"]
+            self.populate_cpu(self.last_cpu_rows)
+            self.cpu_status.set(f"Process data updated at {time.strftime('%H:%M:%S')}")
+        elif tab_text == "Storage Hotspots":
+            self.last_storage_rows = payload["storage"]
+            self.populate_storage(self.last_storage_rows)
+            self.storage_status.set(f"Storage data updated at {time.strftime('%H:%M:%S')} | Path: {self.selected_path.get()}")
+        elif tab_text == "Network Traffic":
+            self.last_network_rows = payload["network"]
+            self.current_net_severity = payload["net_severity"]
+            self.populate_network(payload["network"], payload["net_sent_rate"], payload["net_recv_rate"])
+            self.network_status.set(f"Network data updated at {time.strftime('%H:%M:%S')} | Severity: {payload['net_severity']}")
+        self.loaded_tabs.add(tab_text)
+        self.status.set(f"{tab_text} loaded successfully")
 
     def apply_filters(self):
+
         term = self.filter_text.get().strip().lower()
         logs = self.last_logs
         events = self.last_events
         if term:
             logs = "\n".join(line for line in self.last_logs.splitlines() if term in line.lower())
             events = "\n".join(line for line in self.last_events.splitlines() if term in line.lower())
-        self.set_text(self.logs_text, logs)
+        self.populate_logs_table(logs)
         self.populate_events_table(events)
+
+    def classify_log_line(self, line: str):
+        lower = line.lower()
+        if any(k in lower for k in ["error", "critical", "panic", "segfault", "failed", "denied"]):
+            return "HIGH"
+        if any(k in lower for k in ["warning", "warn", "timeout", "retry", "restart"]):
+            return "MEDIUM"
+        return "LOW"
+
+    def parse_logs_for_table(self, text: str):
+        rows = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            time_value = "-"
+            source = "system"
+            message = line
+
+            # ISO-like journalctl format
+            match = re.match(r"^(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[+-]\d{2}:?\d{2})?)\s+([^\s]+)\s+(.*)$", line)
+            if match:
+                time_value = match.group(1)
+                source = match.group(2)
+                message = match.group(3)
+            else:
+                # syslog style: 'Apr 19 03:11:52 host process[123]: message'
+                match = re.match(r"^([A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+([^\s]+)\s+([^:]+):\s*(.*)$", line)
+                if match:
+                    time_value = match.group(1)
+                    source = f"{match.group(2)} {match.group(3)}".strip()
+                    message = match.group(4) or line
+                else:
+                    # Windows formatted blocks flattened into lines
+                    if line.lower().startswith("timecreated"):
+                        time_value = line.split(":", 1)[1].strip() if ":" in line else "-"
+                        source = "Windows Event"
+                        message = "System event timestamp"
+                    elif line.lower().startswith("providername"):
+                        source = line.split(":", 1)[1].strip() if ":" in line else "Windows Event"
+                        message = line
+                    elif line.lower().startswith("message"):
+                        message = line.split(":", 1)[1].strip() if ":" in line else line
+
+            severity = self.classify_log_line(message if message else line)
+            rows.append((time_value, source, severity, message if message else line))
+        return rows
+
+    def populate_logs_table(self, text: str):
+        for item in self.logs_table.get_children():
+            self.logs_table.delete(item)
+
+        rows = self.parse_logs_for_table(text)
+        if not rows:
+            self.logs_table.insert("", tk.END, values=("-", "system", "LOW", "No matching logs found."), tags=("LOW",))
+            return
+
+        for time_value, source, severity, message in rows:
+            self.logs_table.insert("", tk.END, values=(time_value, source, severity, message), tags=(severity,))
 
     def classify_event(self, details: str, event_id: str = ""):
         text = f"{event_id} {details}".lower()
