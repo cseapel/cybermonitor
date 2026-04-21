@@ -144,7 +144,7 @@ class CyberMonitorApp:
 
         toolbar = ttk.Frame(outer)
         toolbar.pack(fill="x", pady=(0, 8))
-        ttk.Label(toolbar, text="Folder scan path:").pack(side="left")
+        ttk.Label(toolbar, text="Storage scan path:").pack(side="left")
         ttk.Entry(toolbar, textvariable=self.selected_path, width=42).pack(side="left", padx=(8, 6))
         ttk.Button(toolbar, text="Browse", command=self.choose_folder).pack(side="left")
         ttk.Button(toolbar, text="Refresh now", command=self.refresh_current_tab).pack(side="left", padx=(10, 0))
