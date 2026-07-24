@@ -120,7 +120,6 @@ See the `LICENSE` file for full details.
 ## 👤 Author
 
 **Apel Mahmud**  
-Cybersecurity Student Project  
 
 🔗 Repository: https://github.com/cseapel/cybermonitor
 
